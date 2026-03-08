@@ -3,13 +3,15 @@ import pandas as pd
 from datetime import datetime
 from telebot import types
 
-bot = telebot.TeleBot("YOUR_BOT_TOKEN")
+# ቦት ቶክንህን እዚህ አስገባ
+bot = telebot.TeleBot("YOUR_BOT_TOKEN_HERE")
 
-# ዳታውን መጫን
 def load_data():
     try:
+        # የፋይሉ ስም ከ GitHub ጋር አንድ መሆኑን አረጋግጥ
         return pd.read_excel('customers.xlsx')
-    except:
+    except Exception as e:
+        print(f"Error loading Excel: {e}")
         return None
 
 user_state = {}
@@ -17,7 +19,7 @@ user_state = {}
 @bot.message_handler(commands=['start'])
 def start(message):
     user_state[message.chat.id] = {}
-    text = "እንኳን ደህና መጡ! / Baga nagaan dhuftan! / Welcome!\nእባክዎ ቋንቋ ይምረጡ / Maaloo afaan filadhaa / Please choose a language."
+    text = "እንኳን ደህና መጡ! / Baga nagaan dhuftan! / Welcome!\nእባክዎ ቋንቋ ይምረጡ / Maaloo afaan filadhaa."
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("አማርኛ 🇪🇹", callback_data='an'),
                types.InlineKeyboardButton("Afaan Oromoo 🌳", callback_data='or'),
@@ -26,6 +28,7 @@ def start(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def lang_set(call):
+    # ቋንቋውን እና ቀጣዩን ደረጃ (acc) መመዝገብ
     user_state[call.message.chat.id] = {'l': call.data, 's': 'acc'}
     msg = {
         'an': "የኮንትራት አካውንት ቁጥርዎን ያስገቡ።",
@@ -37,12 +40,17 @@ def lang_set(call):
 @bot.message_handler(func=lambda m: m.text.isdigit())
 def handle_digits(m):
     cid = m.chat.id
-    if cid not in user_state or 'l' not in user_state[cid]: return
+    if cid not in user_state or 'l' not in user_state[cid]:
+        return
     
     lang = user_state[cid]['l']
     st = user_state[cid]['s']
     df = load_data()
     
+    if df is None:
+        bot.send_message(cid, "Excel file error!")
+        return
+
     if st == 'acc':
         acc_num = int(m.text)
         cust = df[df['Contract Account'] == acc_num]
@@ -67,28 +75,36 @@ def handle_digits(m):
             # የድሮ ንባብ ከሌለ እንደ 0 ይቆጠራል
             prev = info['Previous_Reading'] if pd.notna(info['Previous_Reading']) else 0
             
-            # 1. የቀን ምርመራ
+            # 1. የቀን ምርመራ (StartDay ን ማረጋገጥ)
             today = datetime.now().day
             if today < int(info['StartDay']):
-                msg = {'an': "📅 የመመዝገቢያ ጊዜ አልደረሰም።", 'or': "📅 Yinnaan galmee hin geenye.", 'en': "📅 Not registration time."}
+                msg = {
+                    'an': f"📅 የመመዝገቢያ ጊዜ አልደረሰም። ቀኑ ገና {info['StartDay']} ነው።",
+                    'or': f"📅 Yinnaan galmee hin geenye. Guyyaan isaa {info['StartDay']} dha.",
+                    'en': f"📅 Not registration time. It starts on day {info['StartDay']}."
+                }
                 bot.send_message(cid, msg[lang])
                 return
 
-            # 2. የንባብ ምርመራ
+            # 2. የንባብ ምርመራ (ከድሮው መብለጥ አለበት)
             if present < prev:
-                err = {'an': "⚠️ ስህተት፡ ንባቡ ካለፈው ያንሳል።", 'or': "⚠️ Dogoggora: Lakkoofsi kan duraa gadi.", 'en': "⚠️ Error: Reading is lower."}
+                err = {
+                    'an': f"⚠️ ስህተት፡ ንባቡ ካለፈው ({prev}) ያንሳል።",
+                    'or': f"⚠️ Dogoggora: Lakkoofsi kan duraa ({prev}) gadi.",
+                    'en': f"⚠️ Error: Reading is lower than previous ({prev})."
+                }
                 bot.send_message(cid, err[lang])
             else:
                 kwh = present - prev
-                bill = round((kwh * 0.4735), 2) # ታሪፉን እዚህ ያስተካክሉ
+                bill = round((kwh * 0.4735), 2) # የታሪፍ ስሌት
                 res = {
-                    'an': f"✅ የክፍያ መረጃ\nስም: {info['Customer Name']}\nየአሁኑ ንባብ: {present}\nክፍያ: {bill} ብር\nየመጨረሻ ቀን: {info['Due Date']}\n\n🔄 ሌላ ለመፈለግ /start ይጫኑ",
-                    'or': f"✅ Odeeffannoo Kaffaltii\nMaqaa: {info['Customer Name']}\nMiitara Ammaa: {present}\nKaffaltii: {bill} ETB\nGuyyaa Dhumaa: {info['Due Date']}\n\n🔄 Nama biraa barbaaduuf /start tuqaa",
-                    'en': f"✅ Bill Info\nName: {info['Customer Name']}\nReading: {present}\nBill: {bill} ETB\nDue Date: {info['Due Date']}\n\n🔄 To search again /start"
+                    'an': f"✅ የክፍያ መረጃ\nስም: {info['Customer Name']}\nንባብ: {present}\nክፍያ: {bill} ብር\nመክፈያ ቀን: {info['Due Date']}\n\n🔄 ሌላ ለመፈለግ /start ይጫኑ",
+                    'or': f"✅ Odeeffannoo Kaffaltii\nMaqaa: {info['Customer Name']}\nMiitara: {present}\nKaffaltii: {bill} ETB\nGuyyaa: {info['Due Date']}\n\n🔄 Deebitee barbaaduuf /start tuqaa",
+                    'en': f"✅ Bill Info\nName: {info['Customer Name']}\nReading: {present}\nBill: {bill} ETB\nDue Date: {info['Due Date']}\n\n🔄 Search again /start"
                 }
                 bot.send_message(cid, res[lang])
-                user_state[cid]['s'] = 'done'
-        except Exception as e:
+                user_state[cid]['s'] = 'done' # ስራው ተጠናቀቀ
+        except Exception:
             bot.send_message(cid, "⚠️ Error!")
 
 bot.infinity_polling()
