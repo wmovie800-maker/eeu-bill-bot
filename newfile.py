@@ -13,7 +13,10 @@ def load_data():
     files = [f for f in os.listdir('.') if f.endswith('.xlsx')]
     if not files: return None
     try:
-        return pd.read_excel(files[0])
+        # ፋይሉን ሲያነብ ስሞችን በራሱ ያስተካክላል
+        df = pd.read_excel(files[0])
+        df.columns = df.columns.str.strip()
+        return df
     except: return None
 
 user_state = {}
@@ -38,33 +41,35 @@ def handle_digits(m):
     cid = m.chat.id
     if cid not in user_state or 'l' not in user_state[cid]: return
     lang, st, df = user_state[cid]['l'], user_state[cid]['s'], load_data()
-    if df is None:
-        bot.send_message(cid, "❌ የኤክሴል ፋይል አልተገኘም!")
-        return
+    if df is None: return
 
     if st == 'acc':
         acc_num = int(m.text)
-        try:
-            cust = df[df['Contract Account'] == acc_num]
-            if not cust.empty:
-                row = cust.iloc[0]
-                user_state[cid].update({'s': 'read', 'i': row})
-                bot.send_message(cid, f"ሰላም {row['Customer Name']}! ንባቡን ይላኩ።")
-            else:
-                bot.send_message(cid, "❌ አካውንቱ አልተገኘም")
-        except:
-            bot.send_message(cid, "⚠️ በኤክሴል ፋይሉ ላይ 'Contract Account' የሚል ኮለም የለም!")
+        cust = df[df['Contract Account'] == acc_num]
+        if not cust.empty:
+            row = cust.iloc[0]
+            user_state[cid].update({'s': 'read', 'i': row})
+            bot.send_message(cid, f"ሰላም {row['Customer Name']}! አሁን በቆጣሪዎ ላይ ያለውን ንባብ ቁጥር ብቻ ይላኩ።")
+        else:
+            bot.send_message(cid, "❌ አካውንቱ አልተገኘም")
 
     elif st == 'read':
         info = user_state[cid]['i']
         try:
             present = int(m.text)
-            prev = info['Previous_Reading'] if pd.notna(info['Previous_Reading']) else 0
-            bill = round(((present - prev) * 0.4735), 2)
-            bot.send_message(cid, f"✅ ተመዝግቧል!\nሂሳብ: {bill} ብር")
+            # 'Previous_Reading' ከኤክሴልህ ጋር መመሳሰሉን ያረጋግጣል
+            prev = float(info['Previous_Reading']) if pd.notna(info['Previous_Reading']) else 0
+            
+            diff = present - prev
+            if diff < 0:
+                bot.send_message(cid, "⚠️ የአሁኑ ንባብ ከበፊቱ ሊያንስ አይችልም!")
+                return
+                
+            bill = round((diff * 0.4735), 2)
+            bot.send_message(cid, f"✅ ተመዝግቧል!\nየበፊቱ ንባብ: {prev}\nየአሁኑ ንባብ: {present}\nሂሳብ: {bill} ብር")
             bot.send_message(ADMIN_ID, f"🔔 አዲስ ንባብ፡ {info['Customer Name']}\n🔢 ንባብ፡ {present}\n💰 ብር፡ {bill}")
             user_state[cid]['s'] = 'done'
-        except: bot.send_message(cid, "⚠️ ቁጥር ብቻ!")
+        except Exception as e:
+            bot.send_message(cid, "⚠️ ስህተት ተፈጥሯል! እባክዎ ቁጥር ብቻ ያስገቡ።")
 
 bot.infinity_polling()
-
