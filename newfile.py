@@ -4,19 +4,17 @@ from datetime import datetime
 from telebot import types
 import os
 
-# የአንተ ትክክለኛ መረጃዎች
 TOKEN = "7622239132:AAHlyRwTfYB4A4QUbX1xJWfqcHPGXLOPs5U"
 ADMIN_ID = "8542308552"
 
 bot = telebot.TeleBot(TOKEN)
 
 def load_data():
-    # በፎልደሩ ውስጥ ያለን ማንኛውንም የኤክሴል ፋይል ፈልጎ ይከፍታል
     files = [f for f in os.listdir('.') if f.endswith('.xlsx')]
     if not files:
         return None
     try:
-        # የመጀመሪያውን ያገኘውን ፋይል ይጠቀማል (ለምሳሌ customers.xlsx ወይም data.xlsx)
+        # ማንኛውንም በፎልደሩ ውስጥ ያለ የኤክሴል ፋይል ያነባል
         return pd.read_excel(files[0])
     except:
         return None
@@ -51,37 +49,34 @@ def handle_digits(m):
 
     if st == 'acc':
         acc_num = int(m.text)
-        # የአካውንት ኮለሙ ስም በኤክሴልህ ላይ 'Contract Account' መሆኑን አረጋግጥ
         try:
+            # በኤክሴልህ ላይ ያለው ኮለም ስም 'Contract Account' መሆኑን አረጋግጥ
             cust = df[df['Contract Account'] == acc_num]
             if not cust.empty:
                 row = cust.iloc[0]
                 user_state[cid].update({'s': 'read', 'i': row})
-                bot.send_message(cid, f"ሰላም {row['Customer Name']}! አሁን በቆጣሪዎ ላይ ያለውን ንባብ ይላኩ። 📸")
+                bot.send_message(cid, f"ሰላም {row['Customer Name']}! አሁን ያለውን ንባብ ይላኩ።")
             else:
                 bot.send_message(cid, "❌ አካውንቱ አልተገኘም")
         except:
-            bot.send_message(cid, "⚠️ በኤክሴል ፋይሉ ላይ ችግር አለ!")
+            bot.send_message(cid, "⚠️ በኤክሴል ፋይሉ ላይ 'Contract Account' የሚል ኮለም የለም!")
 
     elif st == 'read':
         info = user_state[cid]['i']
         try:
             present = int(m.text)
             prev = info['Previous_Reading'] if pd.notna(info['Previous_Reading']) else 0
-            
-            # የቀን ምርመራ
             if datetime.now().day < int(info['StartDay']):
                 bot.send_message(cid, f"📅 ንባብ የሚመዘገበው ከቀን {info['StartDay']} ጀምሮ ነው።")
                 return
-
             if present < prev:
                 bot.send_message(cid, f"⚠️ ስህተት፡ ንባቡ ከበፊቱ ({prev}) ያንሳል።")
             else:
                 bill = round(((present - prev) * 0.4735), 2)
                 bot.send_message(cid, f"✅ ተመዝግቧል!\nሂሳብ: {bill} ብር\n\nለወደኋላ /start")
-                bot.send_message(ADMIN_ID, f"🔔 አዲስ ንባብ ገብቷል!\n👤 ደንበኛ፡ {info['Customer Name']}\n🔢 ንባብ፡ {present}\n💰 ሂሳብ፡ {bill} ETB")
+                bot.send_message(ADMIN_ID, f"🔔 አዲስ ንባብ፡ {info['Customer Name']}\n🔢 ንባብ፡ {present}\n💰 ሂሳብ፡ {bill} ETB")
                 user_state[cid]['s'] = 'done'
         except:
-            bot.send_message(cid, "⚠️ ቁጥር ብቻ ያስገቡ!")
+            bot.send_message(cid, "⚠️ ቁጥር ብቻ!")
 
 bot.infinity_polling()
