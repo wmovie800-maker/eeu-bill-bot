@@ -3,18 +3,21 @@ import pandas as pd
 from datetime import datetime
 from telebot import types
 
-# የአንተ ትክክለኛ መረጃዎች እዚህ ተሞልተዋል
+# የአንተ ትክክለኛ መረጃዎች
 TOKEN = "7622239132:AAHlyRwTfYB4A4QUbX1xJWfqcHPGXLOPs5U"
 ADMIN_ID = "8542308552"
 
 bot = telebot.TeleBot(TOKEN)
 
 def load_data():
-    try:
-        # የኤክሴል ፋይሉ ስም 'customers.xlsx' መሆኑን አረጋግጥ
-        return pd.read_excel('customers.xlsx')
-    except:
-        return None
+    # በምስሉ ላይ ያየሁትን ፋይል ስም እዚህ ተጠቅሜያለሁ
+    file_names = ['customers.xlsx', 'data.xlsx', 'date.xlsx']
+    for f in file_names:
+        try:
+            return pd.read_excel(f)
+        except:
+            continue
+    return None
 
 user_state = {}
 
@@ -39,7 +42,10 @@ def handle_digits(m):
     cid = m.chat.id
     if cid not in user_state or 'l' not in user_state[cid]: return
     lang, st, df = user_state[cid]['l'], user_state[cid]['s'], load_data()
-    if df is None: return
+    
+    if df is None:
+        bot.send_message(cid, "❌ የኤክሴል ፋይሉ አልተገኘም! (Excel file not found)")
+        return
 
     if st == 'acc':
         acc_num = int(m.text)
@@ -47,7 +53,7 @@ def handle_digits(m):
         if not cust.empty:
             row = cust.iloc[0]
             user_state[cid].update({'s': 'read', 'i': row})
-            bot.send_message(cid, f"ሰላም {row['Customer Name']}! ንባቡን ይላኩ።")
+            bot.send_message(cid, f"ሰላም {row['Customer Name']}! አሁን በቆጣሪዎ ላይ ያለውን ንባብ ይላኩ። 📸")
         else:
             bot.send_message(cid, "❌ አካውንቱ አልተገኘም")
 
@@ -57,7 +63,6 @@ def handle_digits(m):
             present = int(m.text)
             prev = info['Previous_Reading'] if pd.notna(info['Previous_Reading']) else 0
             
-            # የቀን ምርመራ
             if datetime.now().day < int(info['StartDay']):
                 bot.send_message(cid, f"📅 ንባብ የሚመዘገበው ከቀን {info['StartDay']} ጀምሮ ነው።")
                 return
@@ -67,7 +72,6 @@ def handle_digits(m):
             else:
                 bill = round(((present - prev) * 0.4735), 2)
                 bot.send_message(cid, f"✅ ተመዝግቧል!\nሂሳብ: {bill} ብር\n\nለወደኋላ /start")
-                # መረጃውን ለአንተ መላክ
                 bot.send_message(ADMIN_ID, f"🔔 አዲስ ንባብ፡ {info['Customer Name']}\n🔢 ንባብ፡ {present}\n💰 ሂሳብ፡ {bill} ETB")
                 user_state[cid]['s'] = 'done'
         except:
